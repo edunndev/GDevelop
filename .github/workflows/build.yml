@@ -1,0 +1,64 @@
+name: Build GDevelop for ARM64 (.deb)
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout do código-fonte
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      # Instalar dependências do sistema
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y curl git build-essential fakeroot dpkg npm python3 python3-pip cmake unzip python3-distutils
+
+      # Instalar Node.js e npm (caso não esteja instalado)
+      - name: Install Node.js and npm
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt install -y nodejs
+          node -v
+          npm -v
+
+      # Instalar dependências do GDevelop
+      - name: Install GDevelop dependencies
+        run: |
+          cd newIDE/app && npm install
+          cd ../electron-app && npm install
+
+      # Compilar o GDevelop para ARM64 (.deb)
+      - name: Build GDevelop IDE for ARM64
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=7168"
+          cd newIDE/electron-app
+          npm run build -- --linux --arm64 --publish=never
+
+      # Gerar o pacote .deb usando electron-builder
+      - name: Create .deb package
+        run: |
+          cd newIDE/electron-app
+          npm run dist -- --linux deb --arm64
+
+      # Limpar a pasta de dist (manter apenas o .deb gerado)
+      - name: Clean dist folder
+        run: rm -rf newIDE/electron-app/dist/linux-arm64-unpacked
+
+      # Armazenar o artefato .deb
+      - name: Store .deb as an artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdevelop-arm64-deb
+          path: newIDE/electron-app/dist/*.deb
+
+      # (Opcional) Upload para um servidor ou serviço de armazenamento como S3
+      - name: Upload .deb to S3 (optional)
+        run: |
+          aws s3 sync newIDE/electron-app/dist s3://meu-bucket/releases/latest/
